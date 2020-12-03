@@ -6,6 +6,7 @@
 // program header file
 #include "bomberman.h"
 
+//Structure position
 typedef struct Position Position;
 struct Position
 {
@@ -13,6 +14,7 @@ struct Position
     int y; //Ordonée
 };
 
+//Structure case
 typedef struct Case Case;
 struct Case
 {  
@@ -44,7 +46,7 @@ extern const int FLAME_BONUS_SCORE; // reward for a flame bonus, which increses 
 
 extern bool DEBUG; // indicates whether the game runs in DEBUG mode
 
-char * binome="Random"; // student names here
+char * binome="GUDIN Félix - DUQUÉ Loukas"; // student names here
 
 // prototypes of the local functions/procedures
 void printAction(action);
@@ -59,7 +61,9 @@ void affMat(int ** m, int l, int c);
 
 bool isPos(int x, int y, int mapxsize, int mapysize);
 Case plusProche(char * * map, int mapxsize, int mapysize, int x, int y, char type);
-Position posPP(int ** distance, char ** map, int tailleX, int tailleY, char type){
+Position posPP(int ** distance, char ** map, int tailleX, int tailleY, char type);
+Position posN(Position pp, int ** pere, int ** distance, int mapxsize, int mapysize);
+
 
 
 
@@ -328,11 +332,33 @@ Position posPP(int ** distance, char ** map, int tailleX, int tailleY, char type
   return pp;
 }
 
+//Fonction renvoyant la position où il faut aller pour aller vers la case pp trouvé en remontant le tableau des peres.
 Position posN(Position pp, int ** pere, int ** distance, int mapxsize, int mapysize){
   int dist = distance[pp.x][pp.y];
   Position pos = pp;
   while(dist>1){ //Boucle FOR mieux ?
-    switch 
+    switch(pere[pos.x][pos.y]) {
+      //Viens de droite
+      case 1:
+        pos.x = pos.x+1; //On décale notre position à droite
+        break;
+      //Viens de gauche
+      case 2:
+        pos.x = pos.x-1; //On décale notre position à gauche
+        break;
+      //Viens du bas
+      case 3:
+        pos.y = pos.y-1; //On décale notre position en bas
+        break;
+      //Viens du haut
+      case 4:
+        pos.y = pos.y+1; //On décale notre position en haut
+        break;
+      //Sinon
+      default:
+        printf("Erreur, ou t'es papa ou t'es ?\n");
+        break;
     }
+    dist = dist - 1;
   }
 }
