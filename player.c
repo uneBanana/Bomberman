@@ -244,6 +244,9 @@ action reculer(Position posNext, Position me, char ** map, int mapxsize, int map
   posNextRela.x = posNext.x-me.x;
   posNextRela.y = posNext.y-me.y;
 
+  int x,y;
+  char val;
+
   action a;
   bool ok;
   
@@ -258,16 +261,28 @@ action reculer(Position posNext, Position me, char ** map, int mapxsize, int map
 
     switch(a) { // check whether the randomly selected action is valid, i.e., if its preconditions are satisfied 
     case NORTH:
-      if(isPos(me.x-1,me.y,mapxsize,mapysize) && map[me.x-1][me.y]==PATH && !(posNextRela.x==-1 && posNextRela.y==0) && secu(me.x-1, me.y, map, mapxsize, mapysize)) ok=true;
+      x=me.x-1;
+      y=me.y;
+      val = map[x][y];
+      if(isPos(x,y,mapxsize,mapysize) && (val==PATH || val==FLAME_BONUS || val==BOMB_BONUS)  && !(posNextRela.x==-1 && posNextRela.y==0) && secu(x, y, map, mapxsize, mapysize)) ok=true;
       break;
     case EAST:
-      if(isPos(me.x,me.y+1,mapxsize,mapysize) && map[me.x][me.y+1]==PATH && !(posNextRela.x==0 && posNextRela.y==1) && secu(me.x, me.y+1, map, mapxsize, mapysize)) ok=true;
+      x=me.x;
+      y=me.y+1;
+      val = map[x][y];
+      if(isPos(x,y,mapxsize,mapysize) && (val==PATH || val==FLAME_BONUS || val==BOMB_BONUS)  && !(posNextRela.x==0 && posNextRela.y==1) && secu(x, y, map, mapxsize, mapysize)) ok=true;
       break;
     case SOUTH:
-      if(isPos(me.x+1,me.y,mapxsize,mapysize) && map[me.x+1][me.y]==PATH && !(posNextRela.x==+1 && posNextRela.y==0) && secu(me.x+1, me.y, map, mapxsize, mapysize)) ok=true;
+      x=me.x+1;
+      y=me.y;
+      val = map[x][y];
+      if(isPos(x,y,mapxsize,mapysize) && (val==PATH || val==FLAME_BONUS || val==BOMB_BONUS)  && !(posNextRela.x==1 && posNextRela.y==0) && secu(x, y, map, mapxsize, mapysize)) ok=true;
       break;
     case WEST:
-      if(isPos(me.x,me.y-1,mapxsize,mapysize) && map[me.x][me.y-1]==PATH && !(posNextRela.x==0 && posNextRela.y==-1) && secu(me.x ,me.y-1 ,map, mapxsize, mapysize)) ok=true;
+      x=me.x;
+      y=me.y-1;
+      val = map[x][y];
+      if(isPos(x,y,mapxsize,mapysize) && (val==PATH || val==FLAME_BONUS || val==BOMB_BONUS)  && !(posNextRela.x==0 && posNextRela.y==-1) && secu(x, y, map, mapxsize, mapysize)) ok=true;
       break;
     default:
       printf("On a un pb dans reculer\n");
@@ -524,7 +539,7 @@ void Init_tabs(int ** * d, int ** * p, int x, int y, char ** map, int mapxsize, 
     if(isPos(x+i,y+j,mapxsize,mapysize) && (distance[x+i][y+j] == -1 || distance[x+i][y+j] > distance[x][y]+1)){ //Si il est accessible et inexploré ou déja été exploré mais de manière moins optimale
       distance[x+i][y+j] = distance[x][y] + 1; //Alors on actualise sa distance
       pere[x+i][y+j] = 1; //Et on dit qu'il vient de droite (1 pour la droite par notre convention)
-      if (map[x+i][y+j]==PATH)
+      if (map[x+i][y+j]==PATH || map[x+i][y+j]==BOMB_BONUS || map[x+i][y+j]==FLAME_BONUS)
       {
         //printf("gauche\n");
         pars(x+i,y+j); //Et on continue le chemin récursivement si c'est un chemin
@@ -537,7 +552,7 @@ void Init_tabs(int ** * d, int ** * p, int x, int y, char ** map, int mapxsize, 
     if(isPos(x+i,y+j,mapxsize,mapysize) && (distance[x+i][y+j] == -1 || distance[x+i][y+j] > distance[x][y]+1)){ //Si il est accessible et inexploré ou déja été exploré mais de manière moins optimale
       distance[x+i][y+j] = distance[x][y] + 1; //Alors on actualise sa distance
       pere[x+i][y+j] = 2; //Et on dit qu'il vient de gauche (2 pour la gauche par notre convention)
-      if(map[x+i][y+j]==PATH){
+      if(map[x+i][y+j]==PATH || map[x+i][y+j]==BOMB_BONUS || map[x+i][y+j]==FLAME_BONUS){
         //printf("droite\n");
         pars(x+i,y+j); //Et on continue le chemin récursivement si c'est un chemin
       }
@@ -549,7 +564,7 @@ void Init_tabs(int ** * d, int ** * p, int x, int y, char ** map, int mapxsize, 
     if(isPos(x+i,y+j,mapxsize,mapysize) && (distance[x+i][y+j] == -1 || distance[x+i][y+j] > distance[x][y]+1)){ //Si il est accessible et inexploré ou déja été exploré mais de manière moins optimale
       distance[x+i][y+j] = distance[x][y] + 1; //Alors on actualise sa distance
       pere[x+i][y+j] = 3;
-      if(map[x+i][y+j]==PATH){
+      if(map[x+i][y+j]==PATH || map[x+i][y+j]==BOMB_BONUS || map[x+i][y+j]==FLAME_BONUS){
         //printf("haut\n");
         pars(x+i,y+j); //Et on continue le chemin récursivement si c'est un chemin
       }
@@ -562,7 +577,7 @@ void Init_tabs(int ** * d, int ** * p, int x, int y, char ** map, int mapxsize, 
     if(isPos(x+i,y+j,mapxsize,mapysize) && (distance[x+i][y+j] == -1 || distance[x+i][y+j] > distance[x][y]+1)){ //Si il est accessible et inexploré ou déja été exploré mais de manière moins optimale
       distance[x+i][y+j] = distance[x][y] + 1; //Alors on actualise sa distance
       pere[x+i][y+j] = 4;
-      if(map[x+i][y+j]==PATH){
+      if(map[x+i][y+j]==PATH || map[x+i][y+j]==BOMB_BONUS || map[x+i][y+j]==FLAME_BONUS){
         //printf("bas\n");
         pars(x+i,y+j); //Et on continue le chemin récursivement si c'est un chemin
       }
