@@ -65,6 +65,7 @@ void affMat(int ** m, int l, int c);
 void affMap(char ** m, int l, int c);
 
 bool isPos(int x, int y, int mapxsize, int mapysize);
+bool isAccess(int x, int y, char ** map);
 Case plusProche(int ** distance, int ** pere, char * * map, int mapxsize, int mapysize, int x, int y, char type);
 void posPP(int ** distance, char ** map, int tailleX, int tailleY, char type, Position * pp, bool * trouve);
 Position posN(Position pp, int ** pere, int ** distance, int mapxsize, int mapysize);
@@ -90,9 +91,11 @@ action bomberman(
 		 int remaining_bombs, // number of bombs
 		 int explosion_range // explosion range for the bombs 
 		 ) {
+  //printf("debut tour\n");
 
   action a; // action to choose and return
   int distMonstre = 1;
+  int margeSecuBomb = 1;
 
   //On créé la matrice des distances initialisé à -1 (inateignable) pour toutes les cases sauf celle où l'on est (init à 0)
   int** distance = NULL;
@@ -113,7 +116,7 @@ action bomberman(
   if(DEBUG){printf("Initialisation ok\n");}
 
   //Si l'on vient de poser une bombe, on s'éloigne
-  if (last_action == BOMBING || (bomb.dist !=-1 && bomb.dist <= explosion_range) ){
+  if (last_action == BOMBING || (bomb.dist !=-1 && bomb.dist <= explosion_range+margeSecuBomb) ){
     if(DEBUG){
       printf("%d\n", last_action);
       printf("bomb dist : %d\n", bomb.dist);
@@ -128,14 +131,14 @@ action bomberman(
     a = reculer(caseAFuire.posNext, me, map, mapxsize, mapysize);
   }
 
-  /*else if(ghost.existe && ghost.dist <= distMonstre)
+  else if(ghost.existe && ghost.dist <= distMonstre)
   {
     reculer(ghost.posNext, me, map, mapxsize, mapysize);
   }
   else if(flamme.existe && flamme.dist <= distMonstre)
   {
     reculer(flamme.posNext, me, map, mapxsize, mapysize);
-  }*/
+  }
   //Si la sortie est visible, on y va
   else if (exit.dist != -1)
   {
@@ -174,6 +177,7 @@ freeMatrice(distance,mapxsize);
 freeMatrice(pere,mapxsize);
 //printf("nbombs = %d\n", remaining_bombs);
 
+//printf("act = ");
 if(DEBUG){printAction(a);}
 return a; // answer to the game engine
 }
@@ -207,46 +211,40 @@ bool secu(int x, int y, char ** map, int mapxsize, int mapysize){
   bool test=true;
   int compteur=0;
   if (isPos(x+1,y, mapxsize, mapysize)){
-    if(map[x+1][y]==BREAKABLE_WALL || map[x+1][y]==WALL) compteur=compteur+1;
+    if(!isAccess(x+1,y,map)) compteur=compteur+1;
   }
   else {
     compteur=compteur+1;
   }
     
   if (isPos(x-1,y, mapxsize, mapysize)){
-    if(map[x-1][y]==BREAKABLE_WALL || map[x-1][y]==WALL) compteur=compteur+1;
+    if(!isAccess(x-1,y,map)) compteur=compteur+1;
   }
   else {
     compteur=compteur+1;
   }
     
   if (isPos(x,y+1, mapxsize, mapysize)){
-    if(map[x][y+1]==BREAKABLE_WALL || map[x][y+1]==WALL) compteur=compteur+1;
+    if(!isAccess(x,y+1,map)) compteur=compteur+1;
   }
   else {
     compteur=compteur+1;
   }
     
   if (isPos(x,y-1, mapxsize, mapysize)){
-    if(map[x][y-1]==BREAKABLE_WALL || map[x][y-1]==WALL) compteur=compteur+1;
+    if(!isAccess(x,y-1,map)) compteur=compteur+1;
   }
   else {
     compteur=compteur+1;
   }
 
-  if (compteur>2) test=false;
+  if (compteur>3) test=false;
   return test;
 }
 
 action reculer(Position posNext, Position me, char ** map, int mapxsize, int mapysize){
 
-  Position posNextRela;
-  posNextRela.x = posNext.x-me.x;
-  posNextRela.y = posNext.y-me.y;
-
   int x,y;
-  char val;
-
   action a;
   bool ok;
   
@@ -254,35 +252,35 @@ action reculer(Position posNext, Position me, char ** map, int mapxsize, int map
     a=rand()%4+1; // ramdomly select an action: 0=BOMBING, 1=NORTH,...
 
     if(DEBUG) { // print the randomly selected action, only in DEBUG mode
-      printf("Candidate action is: ");
-      printAction(a);
-      printf("\n");
+      //printf("Candidate action is: ");
+      //printAction(a);
+      //printf("\n");
     }
 
     switch(a) { // check whether the randomly selected action is valid, i.e., if its preconditions are satisfied 
     case NORTH:
       x=me.x-1;
       y=me.y;
-      val = map[x][y];
-      if(isPos(x,y,mapxsize,mapysize) && (val==PATH || val==FLAME_BONUS || val==BOMB_BONUS)  && !(posNextRela.x==-1 && posNextRela.y==0) && secu(x, y, map, mapxsize, mapysize)) ok=true;
+      
+      if(isPos(x,y,mapxsize,mapysize) && isAccess(x,y,map) && !(x==posNext.x && y==posNext.y) && secu(x, y, map, mapxsize, mapysize)) ok=true;
       break;
     case EAST:
       x=me.x;
       y=me.y+1;
-      val = map[x][y];
-      if(isPos(x,y,mapxsize,mapysize) && (val==PATH || val==FLAME_BONUS || val==BOMB_BONUS)  && !(posNextRela.x==0 && posNextRela.y==1) && secu(x, y, map, mapxsize, mapysize)) ok=true;
+      
+      if(isPos(x,y,mapxsize,mapysize) && isAccess(x,y,map) && !(x==posNext.x && y==posNext.y) && secu(x, y, map, mapxsize, mapysize)) ok=true;
       break;
     case SOUTH:
       x=me.x+1;
       y=me.y;
-      val = map[x][y];
-      if(isPos(x,y,mapxsize,mapysize) && (val==PATH || val==FLAME_BONUS || val==BOMB_BONUS)  && !(posNextRela.x==1 && posNextRela.y==0) && secu(x, y, map, mapxsize, mapysize)) ok=true;
+      
+      if(isPos(x,y,mapxsize,mapysize) && isAccess(x,y,map) && !(x==posNext.x && y==posNext.y) && secu(x, y, map, mapxsize, mapysize)) ok=true;
       break;
     case WEST:
       x=me.x;
       y=me.y-1;
-      val = map[x][y];
-      if(isPos(x,y,mapxsize,mapysize) && (val==PATH || val==FLAME_BONUS || val==BOMB_BONUS)  && !(posNextRela.x==0 && posNextRela.y==-1) && secu(x, y, map, mapxsize, mapysize)) ok=true;
+      
+      if(isPos(x,y,mapxsize,mapysize) && isAccess(x,y,map) && !(x==posNext.x && y==posNext.y) && secu(x, y, map, mapxsize, mapysize)) ok=true;
       break;
     default:
       printf("On a un pb dans reculer\n");
@@ -393,7 +391,17 @@ void affMat(int ** m, int l, int c){
 
 //Renvoie vrai si la position (x,y)est bien dans la map
 bool isPos(int x, int y, int mapxsize, int mapysize){
-  return (x>=0 && x<mapxsize) &&  (y>=0 && y<mapysize);
+  return (x>=0 && x<mapxsize-1) &&  (y>=0 && y<mapysize-1);
+}
+
+bool isAccess(int x, int y, char ** map){
+  bool ok = false;
+  char val = map[x][y];
+  if(val == PATH) ok = true;
+  if(val == FLAME_BONUS) ok = true;
+  if(val == BOMB_BONUS) ok = true;
+
+  return ok;
 }
 
 Case plusProche(
