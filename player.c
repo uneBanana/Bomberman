@@ -1,8 +1,3 @@
-//Les lignes correspondent à y !
-//Les collones a x !
-
-
-
 // compiler header files
 #include <stdbool.h> // bool, true, false
 #include <stdlib.h> // rand
@@ -57,7 +52,8 @@ char * binome="GUDIN Félix - DUQUÉ Loukas"; // student names here
 // prototypes of the local functions/procedures
 void printAction(action);
 action actionXY(Position);
-action reculer(Position, Position, char **);
+bool secu(int x, int y, char ** map, int mapx, int mapy);
+action reculer(Position, Position, char **, int, int);
 action aller(Position, Position);
 bool isBombable(Case c);
 
@@ -69,9 +65,11 @@ void affMat(int ** m, int l, int c);
 void affMap(char ** m, int l, int c);
 
 bool isPos(int x, int y, int mapxsize, int mapysize);
-Case plusProche(char * * map, int mapxsize, int mapysize, int x, int y, char type);
+Case plusProche(int ** distance, int ** pere, char * * map, int mapxsize, int mapysize, int x, int y, char type);
 void posPP(int ** distance, char ** map, int tailleX, int tailleY, char type, Position * pp, bool * trouve);
 Position posN(Position pp, int ** pere, int ** distance, int mapxsize, int mapysize);
+
+void Init_tabs(int ** * d, int ** * p, int x, int y, char ** map, int mapxsize, int mapysize);
 
 void affMap(char ** m, int l, int c);
 
@@ -94,17 +92,18 @@ action bomberman(
 		 ) {
 
   action a; // action to choose and return
-  printf("\nAff map\n");
-  affMap(map,mapxsize,mapysize);
+  int distMonstre = 1;
 
-  Case exit = plusProche(map,mapxsize,mapysize,x,y,EXIT);
-  printf("exit : '%c'\n", EXIT);
-  Case break_wall = plusProche(map,mapxsize,mapysize,x,y,BREAKABLE_WALL);
-  printf("BW : '%c'\n", BREAKABLE_WALL);
-  Case bomb = plusProche(map,mapxsize,mapysize,x,y,BOMB);
-  printf("bomb %c ok\n",BOMB);
+  //On créé la matrice des distances initialisé à -1 (inateignable) pour toutes les cases sauf celle où l'on est (init à 0)
+  int** distance = NULL;
+  int** pere = NULL;
+  Init_tabs(&distance, &pere, x,y,map,mapxsize,mapysize);
 
-  printf("\n On commence\n");
+  Case exit = plusProche(distance, pere, map, mapxsize, mapysize, x, y, EXIT);
+  Case break_wall = plusProche(distance, pere, map, mapxsize, mapysize, x, y, BREAKABLE_WALL);
+  Case bomb = plusProche(distance, pere, map, mapxsize, mapysize, x, y, BOMB);
+  Case ghost = plusProche(distance, pere, map, mapxsize, mapysize, x, y, GHOST_ENEMY);
+  Case flamme = plusProche(distance, pere, map, mapxsize, mapysize, x, y, FLAME_ENEMY);
 
   Position me;
   me.x = x;
@@ -115,42 +114,65 @@ action bomberman(
 
   //Si l'on vient de poser une bombe, on s'éloigne
   if (last_action == BOMBING || (bomb.dist !=-1 && bomb.dist <= explosion_range) ){
-    printf("%d\n", last_action);
-    printf("bomb dist : %d\n", bomb.dist);
-    printf("CAS 1\n");
+    if(DEBUG){
+      printf("%d\n", last_action);
+      printf("bomb dist : %d\n", bomb.dist);
+      printf("CAS 1\n");
+    }
     Case caseAFuire;
     if(last_action == BOMBING){
       caseAFuire = break_wall;
     }else{
       caseAFuire = bomb;
     }
-    a = reculer(caseAFuire.posNext, me, map);
+    a = reculer(caseAFuire.posNext, me, map, mapxsize, mapysize);
   }
+
+  /*else if(ghost.existe && ghost.dist <= distMonstre)
+  {
+    reculer(ghost.posNext, me, map, mapxsize, mapysize);
+  }
+  else if(flamme.existe && flamme.dist <= distMonstre)
+  {
+    reculer(flamme.posNext, me, map, mapxsize, mapysize);
+  }*/
   //Si la sortie est visible, on y va
   else if (exit.dist != -1)
   {
     //La fonction aller renvoie l'action la plus approprié pour aller à une position
-    printf("CAS 2 exit\n");
+    if(DEBUG) printf("CAS 2 exit\n");
     a = aller(exit.posNext,me);
   }
   //condition de "BOMBING" : atteindre le mur le plus proche (En fait nn, juste atteindre un mur mais éuivalente il me semble) et avoir des Bombe
   else if (isBombable(break_wall) && remaining_bombs > 0)
   {
-    printf("CAS 3 bombing\n");
+    if(DEBUG) printf("CAS 3 bombing\n");
     a = BOMBING;
   }
-  /*Si plusde bombe on peut rien faire
+  /*Si plusde bombe on va en cherché
   else if(remaining_bombs==0){
-    printf("On a un problem Huston\n");
-    a=BOMBING;
+    if (!bombBonus.existe) printf("t'es dans la merde\n");
+    a = aller(bombBonus.posNext,me);
   }*/
   //Dans le cas contraire, on se rapproche d'un mur cassable
-  else
+  else if(break_wall.dist>1)
   {
-    printf("CAS 5 move \n");
-    printf("posNext %d,%d\n", break_wall.posNext.x,break_wall.posNext.y);
+    if(DEBUG){
+      printf("CAS 5 move \n");
+      printf("posNext %d,%d\n", break_wall.posNext.x,break_wall.posNext.y);
+    }
+    
     a = aller(break_wall.posNext,me);
   }
+  else
+  {
+    if(DEBUG) printf("Cas 6, gange temps et recule\n");
+    a = reculer(break_wall.posNext, me, map, mapxsize, mapysize);
+  }
+
+freeMatrice(distance,mapxsize);
+freeMatrice(pere,mapxsize);
+//printf("nbombs = %d\n", remaining_bombs);
 
 if(DEBUG){printAction(a);}
 return a; // answer to the game engine
@@ -181,7 +203,42 @@ void printAction(action a) {
 }
 
 
-action reculer(Position posNext, Position me, char ** map){
+bool secu(int x, int y, char ** map, int mapxsize, int mapysize){
+  bool test=true;
+  int compteur=0;
+  if (isPos(x+1,y, mapxsize, mapysize)){
+    if(map[x+1][y]==BREAKABLE_WALL || map[x+1][y]==WALL) compteur=compteur+1;
+  }
+  else {
+    compteur=compteur+1;
+  }
+    
+  if (isPos(x-1,y, mapxsize, mapysize)){
+    if(map[x-1][y]==BREAKABLE_WALL || map[x-1][y]==WALL) compteur=compteur+1;
+  }
+  else {
+    compteur=compteur+1;
+  }
+    
+  if (isPos(x,y+1, mapxsize, mapysize)){
+    if(map[x][y+1]==BREAKABLE_WALL || map[x][y+1]==WALL) compteur=compteur+1;
+  }
+  else {
+    compteur=compteur+1;
+  }
+    
+  if (isPos(x,y-1, mapxsize, mapysize)){
+    if(map[x][y-1]==BREAKABLE_WALL || map[x][y-1]==WALL) compteur=compteur+1;
+  }
+  else {
+    compteur=compteur+1;
+  }
+
+  if (compteur>2) test=false;
+  return test;
+}
+
+action reculer(Position posNext, Position me, char ** map, int mapxsize, int mapysize){
 
   Position posNextRela;
   posNextRela.x = posNext.x-me.x;
@@ -201,23 +258,23 @@ action reculer(Position posNext, Position me, char ** map){
 
     switch(a) { // check whether the randomly selected action is valid, i.e., if its preconditions are satisfied 
     case NORTH:
-      if(map[me.x-1][me.y]==PATH && !(posNextRela.x==-1 && posNextRela.y==0)) ok=true;
+      if(isPos(me.x-1,me.y,mapxsize,mapysize) && map[me.x-1][me.y]==PATH && !(posNextRela.x==-1 && posNextRela.y==0) && secu(me.x-1, me.y, map, mapxsize, mapysize)) ok=true;
       break;
     case EAST:
-      if(map[me.x][me.y+1]==PATH && !(posNextRela.x==0 && posNextRela.y==1)) ok=true;
+      if(isPos(me.x,me.y+1,mapxsize,mapysize) && map[me.x][me.y+1]==PATH && !(posNextRela.x==0 && posNextRela.y==1) && secu(me.x, me.y+1, map, mapxsize, mapysize)) ok=true;
       break;
     case SOUTH:
-      if(map[me.x+1][me.y]==PATH && !(posNextRela.x==+1 && posNextRela.y==0)) ok=true;
+      if(isPos(me.x+1,me.y,mapxsize,mapysize) && map[me.x+1][me.y]==PATH && !(posNextRela.x==+1 && posNextRela.y==0) && secu(me.x+1, me.y, map, mapxsize, mapysize)) ok=true;
       break;
     case WEST:
-      if(map[me.x][me.y-1]==PATH && !(posNextRela.x==0 && posNextRela.y==-1)) ok=true;
+      if(isPos(me.x,me.y-1,mapxsize,mapysize) && map[me.x][me.y-1]==PATH && !(posNextRela.x==0 && posNextRela.y==-1) && secu(me.x ,me.y-1 ,map, mapxsize, mapysize)) ok=true;
       break;
     default:
       printf("On a un pb dans reculer\n");
       break;
     }
   } while(!ok);
-  printf("posNext %d,%d\n", posNext.x, posNext.y);
+  if(DEBUG) printAction(a);
 
   return a;
 }
@@ -306,7 +363,7 @@ void affMat(int ** m, int l, int c){
   int i,j;
   for(i=0;i<l;i++){
     for(j=0;j<c;j++){
-      if(m[i][j]==-1){
+      if(m[i][j]<0){
         printf("* ");
       }else{
         printf("%d ",m[i][j]);
@@ -325,6 +382,8 @@ bool isPos(int x, int y, int mapxsize, int mapysize){
 }
 
 Case plusProche(
+    int ** distance,
+    int ** pere,
     char * * map, // array of char modeling the game map
     int mapxsize, // x size of the map
     int mapysize, // y size of the map
@@ -333,16 +392,118 @@ Case plusProche(
     char type //Le type de case recherchée (WALL, BREAKABLE_WALL, PATH, EXIT...)
     ){
 
+  //printf("tab ok\n");
 
-  //On créé la matrice des distances initialisé à -1 (inateignable) pour toutes les cases sauf celle où l'on est (init à 0)
+  //On obtient à ce stade les tableau distance, et pere correctement remplis.
+  //Reste à trouver par quelle chemin il faut passer
+
+  if(DEBUG) affMat(distance, mapxsize, mapysize);
+  //printf("\n");
+  //affMat(pere, mapxsize, mapysize);
+
+  //printf("\ndeb ok\n");
+
+
+  Position pp;
+  pp.x=0;
+  pp.y=0;
+  bool trouve = false;
+  posPP(distance, map, mapxsize, mapysize, type, &pp, &trouve); //Position du plus proche
+  if(DEBUG) printf("pp ok\n");
+
+  Position next = posN(pp, pere, distance, mapxsize, mapysize); //Position suivante retrouvé grace au tableau pere
+  if(DEBUG) printf("posN ok\n");
+
+
+
+  Case pProche;
+
+  pProche.existe = trouve;
+  pProche.val = map[pp.x][pp.y];
+  if(DEBUG) printf("val = %c\n", pProche.val);
+  pProche.dist = distance[pp.x][pp.y];
+  if(DEBUG) printf("d = %d\n", pProche.dist);
+
+  pProche.pos = pp;
+  if(DEBUG) printf("pos = %d,%d\n", pProche.pos.x,pProche.pos.y);
+  pProche.posNext = next;
+  if(DEBUG) printf("posNext = %d,%d\n", pProche.posNext.x,pProche.posNext.y);
+
+  
+  return pProche;
+}
+
+//PROCEDURE renvoyant la position la plus proche à partir de la matrice des distance
+void posPP(int ** distance, char ** map, int tailleX, int tailleY, char type, Position * pp, bool * trouve){
+  int distMin = 1000;
+  
+  int i,j;
+  for (i = 0; i < tailleX; i++) {
+    for (j = 0; j < tailleY; j++) {
+      if(map[i][j]==type && distance[i][j]<distMin && distance[i][j]!=-1 && distance[i][j]!=0){
+        distMin = distance[i][j];
+        (*pp).x = i;
+        (*pp).y = j;
+        *trouve = true;
+      }
+    }
+  }
+}
+
+//Fonction renvoyant la position où il faut aller pour aller vers la case pp trouvé en remontant le tableau des peres.
+Position posN(Position pp, int ** pere, int ** distance, int mapxsize, int mapysize){
+  int dist = distance[pp.x][pp.y];
+  //affMat(distance,mapxsize,mapysize);
+  //affMat(pere,mapxsize,mapysize);
+  Position pos = pp;
+  //printf("x,y = %d,%d\n", pos.x,pos.y);
+  while(dist>1){ //Boucle FOR mieux ?
+    switch(pere[pos.x][pos.y]) {
+      //Viens de droite
+      case 1:
+        pos.x = pos.x+1; //On décale notre position à droite
+        break;
+      //Viens de gauche
+      case 2:
+        pos.x = pos.x-1; //On décale notre position à gauche
+        break;
+      //Viens du bas
+      case 3:
+        pos.y = pos.y-1; //On décale notre position en bas
+        break;
+      //Viens du haut
+      case 4:
+        pos.y = pos.y+1; //On décale notre position en haut
+        break;
+      //Sinon
+      default:
+        printf("Erreur, ou t'es papa ou t'es ?\n");
+        break;
+    }
+    dist = dist - 1;
+  }
+  return pos;
+}
+
+//***************************
+void affMap(char ** m, int l, int c){
+  int i,j;
+  for(i=0;i<l;i++){
+    for(j=0;j<c;j++){
+      printf(" %c ",m[i][j]);
+    }
+    printf("\n");
+  }
+}
+
+//***
+void Init_tabs(int ** * d, int ** * p, int x, int y, char ** map, int mapxsize, int mapysize){
+
   int** distance = NULL;
   distance = matrice(mapxsize, mapysize);
   initMat(distance, mapxsize, mapysize, -1);
   distance[x][y] = 0;
-  //affMat(distance, mapxsize, mapysize);
 
-
-  //On créé la matrice des père initialisé à -1 (innateint) pour toutes les cases
   int** pere = NULL;
   pere = matrice(mapxsize, mapysize);
   initMat(pere, mapxsize, mapysize, -2);
@@ -409,111 +570,7 @@ Case plusProche(
   }
 
   pars(x,y);
-  //printf("tab ok\n");
 
-  //On obtient à ce stade les tableau distance, et pere correctement remplis.
-  //Reste à trouver par quelle chemin il faut passer
-
-  affMat(distance, mapxsize, mapysize);
-  //printf("\n");
-  //affMat(pere, mapxsize, mapysize);
-
-  printf("\ndeb ok\n");
-
-
-  Position pp;
-  pp.x=0;
-  pp.y=0;
-  bool trouve = false;
-  posPP(distance, map, mapxsize, mapysize, type, &pp, &trouve); //Position du plus proche
-  printf("pp ok\n");
-
-  Position next = posN(pp, pere, distance, mapxsize, mapysize); //Position suivante retrouvé grace au tableau pere
-  printf("posN ok\n");
-
-
-
-  Case pProche;
-
-  pProche.existe = trouve;
-  pProche.val = map[pp.x][pp.y];
-  printf("val = %c\n", pProche.val);
-  pProche.dist = distance[pp.x][pp.y];
-  printf("d = %d\n", pProche.dist);
-
-  pProche.pos = pp;
-  printf("pos = %d,%d\n", pProche.pos.x,pProche.pos.y);
-  pProche.posNext = next;
-  printf("posNext = %d,%d\n", pProche.posNext.x,pProche.posNext.y);
-
-
-  printf("On libere\n");
-  //On oublie pas de libérer la mémoire
-  freeMatrice(distance,mapxsize);
-  freeMatrice(pere,mapxsize);
-
-  return pProche;
-}
-
-//PROCEDURE renvoyant la position la plus proche à partir de la matrice des distance
-void posPP(int ** distance, char ** map, int tailleX, int tailleY, char type, Position * pp, bool * trouve){
-  int distMin = 1000;
-  printf("TX:%d et TY:%d \n", tailleX,tailleY);
-  
-  int i,j;
-  for (i = 0; i < tailleX; i++) {
-    for (j = 0; j < tailleY; j++) {
-      if(map[i][j]==type && distance[i][j]<distMin && distance[i][j]!=-1 && distance[i][j]!=0){
-        distMin = distance[i][j];
-        (*pp).x = i;
-        (*pp).y = j;
-        *trouve = true;
-      }
-    }
-  }
-}
-
-//Fonction renvoyant la position où il faut aller pour aller vers la case pp trouvé en remontant le tableau des peres.
-Position posN(Position pp, int ** pere, int ** distance, int mapxsize, int mapysize){
-  int dist = distance[pp.x][pp.y];
-  printf("posN 1\n");
-  //affMat(distance,mapxsize,mapysize);
-  Position pos = pp;
-  while(dist>1){ //Boucle FOR mieux ?
-    switch(pere[pos.x][pos.y]) {
-      //Viens de droite
-      case 1:
-        pos.x = pos.x+1; //On décale notre position à droite
-        break;
-      //Viens de gauche
-      case 2:
-        pos.x = pos.x-1; //On décale notre position à gauche
-        break;
-      //Viens du bas
-      case 3:
-        pos.y = pos.y-1; //On décale notre position en bas
-        break;
-      //Viens du haut
-      case 4:
-        pos.y = pos.y+1; //On décale notre position en haut
-        break;
-      //Sinon
-      default:
-        printf("Erreur, ou t'es papa ou t'es ?\n");
-        break;
-    }
-    dist = dist - 1;
-  }
-  return pos;
-}
-
-//***************************
-void affMap(char ** m, int l, int c){
-  int i,j;
-  for(i=0;i<l;i++){
-    for(j=0;j<c;j++){
-      printf(" %c ",m[i][j]);
-    }
-    printf("\n");
-  }
+  *p = pere;
+  *d = distance;
 }
