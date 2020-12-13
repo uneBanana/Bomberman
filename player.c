@@ -50,28 +50,33 @@ extern bool DEBUG; // indicates whether the game runs in DEBUG mode
 char * binome="GUDIN Félix - DUQUÉ Loukas"; // student names here
 
 // prototypes of the local functions/procedures
-void printAction(action);
-action actionXY(Position);
+
+//Fonctions booléennes
+bool isPos(int x, int y, int mapxsize, int mapysize);
+bool isAccess(int x, int y, char ** map);
+bool isBombable(Case c);
 bool secu(int x, int y, char ** map, int mapx, int mapy);
+
+
+//Fonctions de déplacement
 action reculer(Position, Position, char **, int, int);
 action aller(Position, Position);
-bool isBombable(Case c);
+action actionXY(Position);
 
 //Pour les matrices
 int ** matrice(int l,int c);
 void freeMatrice(int ** M, int l);
 void initMat(int ** M, int tailleX, int tailleY, int val);
 void affMat(int ** m, int l, int c);
-void affMap(char ** m, int l, int c);
 
-bool isPos(int x, int y, int mapxsize, int mapysize);
-bool isAccess(int x, int y, char ** map);
+//Module de détermination de la case la plus proche
+void Init_tabs(int ** * d, int ** * p, int x, int y, char ** map, int mapxsize, int mapysize);
 Case plusProche(int ** distance, int ** pere, char * * map, int mapxsize, int mapysize, int x, int y, char type);
 void posPP(int ** distance, char ** map, int tailleX, int tailleY, char type, Position * pp, bool * trouve);
 Position posN(Position pp, int ** pere, int ** distance, int mapxsize, int mapysize);
 
-void Init_tabs(int ** * d, int ** * p, int x, int y, char ** map, int mapxsize, int mapysize);
-
+//Procédure d'affichage pour le débuggage
+void printAction(action);
 void affMap(char ** m, int l, int c);
 
 
@@ -79,42 +84,50 @@ void affMap(char ** m, int l, int c);
 
 /*
   bomberman function:
-  This function randomly select a valid move for BOMBERMAN based on its current position on the game map.
+  Renvoie l'action la plus efficiente (voir compte rendu (CR))
+  PS Dans les arguments on met d'abord Y et ensuite X pour suivre notre convention (cf CR)
  */
 action bomberman(
 		 char * * map, // array of char modeling the game map
 		 int mapysize, // x size of the map
 		 int mapxsize, // y size of the map
-		 int y, // x position of BOMBERMAN
-		 int x, // y position of BOMBERMAN
+		 int y, // x position of BOMBERMAN (selon l'affichage, pas selon notre convetion)
+		 int x, // y position of BOMBERMAN 
 		 action last_action, // last action made, -1 in the be beginning 
 		 int remaining_bombs, // number of bombs
 		 int explosion_range // explosion range for the bombs 
 		 ) {
-  //printf("debut tour\n");
 
   action a; // action to choose and return
-  int distMonstre = 1;
-  int margeSecuBomb = 1;
+  if(DEBUG) printf("Debut tour\n");
 
-  //On créé la matrice des distances initialisé à -1 (inateignable) pour toutes les cases sauf celle où l'on est (init à 0)
+  //Parametres modifiable 
+  int distMonstre = 1; //Distance a partir de laquelle on s'enfuit en voyant un montsre
+  int margeSecuBomb = 1; //Distance en plus du range de la bombe pour la sécurité
+
+  //Création des matrices distance et pere remplis par la fonction Init_tabs
   int** distance = NULL;
   int** pere = NULL;
   Init_tabs(&distance, &pere, x,y,map,mapxsize,mapysize);
 
+
+  //Déclaration (et calculs) des cases les plus proches.
   Case exit = plusProche(distance, pere, map, mapxsize, mapysize, x, y, EXIT);
   Case break_wall = plusProche(distance, pere, map, mapxsize, mapysize, x, y, BREAKABLE_WALL);
   Case bomb = plusProche(distance, pere, map, mapxsize, mapysize, x, y, BOMB);
   Case ghost = plusProche(distance, pere, map, mapxsize, mapysize, x, y, GHOST_ENEMY);
   Case flamme = plusProche(distance, pere, map, mapxsize, mapysize, x, y, FLAME_ENEMY);
 
+  //Déclaration de la Position qui correspond 
   Position me;
   me.x = x;
   me.y = y;
 
 
+  //Début du programme et de l'algo
   if(DEBUG){printf("Initialisation ok\n");}
 
+  //1er cas : 
   //Si l'on vient de poser une bombe, on s'éloigne
   if (last_action == BOMBING || (bomb.dist !=-1 && bomb.dist <= explosion_range+margeSecuBomb) ){
     if(DEBUG){
@@ -131,6 +144,8 @@ action bomberman(
     a = reculer(caseAFuire.posNext, me, map, mapxsize, mapysize);
   }
 
+  //2e cas :
+  //Si un monstre est à distance distMonstre ou moins de nous, on fuit.
   else if(ghost.existe && ghost.dist <= distMonstre)
   {
     reculer(ghost.posNext, me, map, mapxsize, mapysize);
@@ -139,25 +154,26 @@ action bomberman(
   {
     reculer(flamme.posNext, me, map, mapxsize, mapysize);
   }
+
+  //3e cas :
   //Si la sortie est visible, on y va
   else if (exit.dist != -1)
   {
-    //La fonction aller renvoie l'action la plus approprié pour aller à une position
     if(DEBUG) printf("CAS 2 exit\n");
     a = aller(exit.posNext,me);
   }
-  //condition de "BOMBING" : atteindre le mur le plus proche (En fait nn, juste atteindre un mur mais éuivalente il me semble) et avoir des Bombe
+
+  //4e cas :
+  //Si on peut poser une bombe, on bombe
+  //condition de "BOMBING" : atteindre le mur cassable le plus proche et avoir des Bombe
   else if (isBombable(break_wall) && remaining_bombs > 0)
   {
     if(DEBUG) printf("CAS 3 bombing\n");
     a = BOMBING;
   }
-  /*Si plusde bombe on va en cherché
-  else if(remaining_bombs==0){
-    if (!bombBonus.existe) printf("t'es dans la merde\n");
-    a = aller(bombBonus.posNext,me);
-  }*/
-  //Dans le cas contraire, on se rapproche d'un mur cassable
+
+  //5e cas :
+  //Dans le cas contraire, on se rapproche d'un mur cassable, pour le bombarder.
   else if(break_wall.dist>1)
   {
     if(DEBUG){
@@ -167,81 +183,86 @@ action bomberman(
     
     a = aller(break_wall.posNext,me);
   }
+
+  //6e cas :
+  //On ne peut pas bomber et on est a une distance <= 1 d'un mur, c'est que l'on a plus
+  //de bombes, et que l'on doit attendre, on s'éloigne alors du mur, pour s'en rapprocher
+  // au prochain et donc simuler une attente.
   else
   {
     if(DEBUG) printf("Cas 6, gange temps et recule\n");
     a = reculer(break_wall.posNext, me, map, mapxsize, mapysize);
   }
 
+
+//On libère les matrices distance et pere alloués dynamiquement au début du tour.
 freeMatrice(distance,mapxsize);
 freeMatrice(pere,mapxsize);
-//printf("nbombs = %d\n", remaining_bombs);
 
-//printf("act = ");
+//On renvoie l'action du tour
 if(DEBUG){printAction(a);}
-return a; // answer to the game engine
-}
-
-/*
-  printAction procedure:
-  This procedure prints the input action name on screen.
- */
-void printAction(action a) {
-  switch(a) {
-  case BOMBING:
-    printf("BOMBING");
-    break;
-  case NORTH:
-    printf("NORTH");
-    break;
-  case EAST:
-    printf("EAST");
-    break;
-  case SOUTH:
-    printf("SOUTH");
-    break;
-  case WEST:
-    printf("WEST");
-    break;
-  }
+return a;
 }
 
 
+//****************************************************************************
+//**************************Modules complémentaires***************************
+//****************************************************************************
+
+//##########################
+//###Fonctions booléennes###
+//##########################
+
+//Fonction qui renvoie vrai si la position (x,y) est bien dans la map
+bool isPos(int x, int y, int mapxsize, int mapysize){
+  return (x>=0 && x<mapxsize) &&  (y>=0 && y<mapysize);
+}
+
+//Fonction qui renvoie vrai ssi la position (x,y) peut etre parcouru par bomberman
+//ie si c'est un chemin ou un bonus
+bool isAccess(int x, int y, char ** map){
+  bool ok = false;
+  char val = map[x][y];
+  if(val == PATH) ok = true;
+  if(val == FLAME_BONUS) ok = true;
+  if(val == BOMB_BONUS) ok = true;
+
+  return ok;
+}
+
+//Fonction qui renvoie true si la case peut etre bomber
+//On fait simple, on peut seulement si on est a coté (ie la distance est d'un)
+bool isBombable(Case c){
+  return c.dist == 1;
+}
+
+
+//Fonction qui renvoie si la position (x,y) est sécurisée
+//On considère que la case est sécurisé si l'on peut fuire sans faire demi tour
+//ie s'il y a au moins 1 case accesible (la notre ne l'est pas puisque @ n'est pas considéré accesible)
 bool secu(int x, int y, char ** map, int mapxsize, int mapysize){
-  bool test=true;
-  int compteur=0;
-  if (isPos(x+1,y, mapxsize, mapysize)){
-    if(!isAccess(x+1,y,map)) compteur=compteur+1;
-  }
-  else {
-    compteur=compteur+1;
-  }
+  bool safe=false;
+  if (isPos(x+1,y, mapxsize, mapysize) && isAccess(x+1,y,map)) safe=true;
+  if (isPos(x-1,y, mapxsize, mapysize) && isAccess(x-1,y,map)) safe=true;
+  if (isPos(x,y+1, mapxsize, mapysize) && isAccess(x,y+1,map)) safe=true;
+  if (isPos(x,y-1, mapxsize, mapysize) && isAccess(x,y-1,map)) safe=true;
     
-  if (isPos(x-1,y, mapxsize, mapysize)){
-    if(!isAccess(x-1,y,map)) compteur=compteur+1;
-  }
-  else {
-    compteur=compteur+1;
-  }
-    
-  if (isPos(x,y+1, mapxsize, mapysize)){
-    if(!isAccess(x,y+1,map)) compteur=compteur+1;
-  }
-  else {
-    compteur=compteur+1;
-  }
-    
-  if (isPos(x,y-1, mapxsize, mapysize)){
-    if(!isAccess(x,y-1,map)) compteur=compteur+1;
-  }
-  else {
-    compteur=compteur+1;
-  }
-
-  if (compteur>3) test=false;
-  return test;
+  return safe;
 }
 
+
+
+
+//##############################
+//###Fonctions de déplacement###
+//##############################
+
+
+//Fonction reculer
+//renvoie une action qui permet de s'éloigner de la position posNext à partir de la position me
+//on choisit aléatoirement et on verifie que l'action choisie nous mène a une position valide,
+//Accessible qui n'est pas posNext (on veut s'en éloigner) et qui est sécurisé pour ne pas
+//s'enfermer dans une impasse après avoir poser une bombe par exemple
 action reculer(Position posNext, Position me, char ** map, int mapxsize, int mapysize){
 
   int x,y;
@@ -249,7 +270,7 @@ action reculer(Position posNext, Position me, char ** map, int mapxsize, int map
   bool ok;
   
   do {
-    a=rand()%4+1; // ramdomly select an action: 0=BOMBING, 1=NORTH,...
+    a=rand()%4+1; //Action choisi aléatoirement (le +1 permet de choisir entre 1 et 5 pour enlever le cas 0 : BOMBING)
 
     if(DEBUG) { // print the randomly selected action, only in DEBUG mode
       //printf("Candidate action is: ");
@@ -292,6 +313,9 @@ action reculer(Position posNext, Position me, char ** map, int mapxsize, int map
   return a;
 }
 
+
+//Fonction basique qui renvoie l'action à faire pour aller à une position voisine
+//basé sur la fonction actionXY
 action aller(Position p, Position me){
   Position pos;
   pos.x = p.x-me.x;
@@ -299,6 +323,9 @@ action aller(Position p, Position me){
   return actionXY(pos);
 }
 
+
+//Fonction qui à partir d'une position voisine à 0 renvoie l'action à faire pour y
+//aller (à partir de 0)
 action actionXY(Position p){
   int x = p.x;
   int y = p.y;
@@ -320,29 +347,31 @@ action actionXY(Position p){
   else{
     printf("Erreur position (x,y) pas dans le domaine de def !\n");
     printf("x = %d et y= %d\n", x,y);
-    a=BOMBING;
+    a=BOMBING; //Pour perdre et ne pas faire planter le jeu on renvoie une action quand même
   }
   return a;    
 }
 
-//On fait simple, on peut seulement si on est a coté
-bool isBombable(Case c){
-  return c.dist == 1;
-}
 
-///**********************************************************
-//Matrice
 
+//#######################################
+//#####Modules relatifs aux Matrices#####
+//#######################################
+
+//Fonction de création d'une matrice de taille variable (l,c)
+//On renvoie un int ** crée en construisant un tableau dynamique
+//de type int * et en remplissant chaque élément(correspondant aux ligne)
+//par un int * (les collones)
 int ** matrice(int l,int c){
   int ** M = NULL;
-  M = malloc (sizeof(int*)*l);
+  M = malloc (sizeof(int*)*l); //Allocation du tableau de tableau de taille l
   if(M==NULL){
     printf("erreur Allocation Dynamique de la matrice");
     exit(0);
   }
   int i;
-  for (i=0; i<l; i++){
-    M[i] = malloc (sizeof(int)*c);
+  for (i=0; i<l; i++){              //Pour chaque ligne
+    M[i] = malloc (sizeof(int)*c);  //On remplit paar le tableau corresspondant à la collone
     if(M[i]==NULL)
     {
       printf("erreur Allocation Dynamique de la matrice à ligne %d",i);
@@ -352,7 +381,8 @@ int ** matrice(int l,int c){
   return M;
 }
 
-//libère la mémoire en fin d'utilisation
+//Procédure qui libère la mémoire en fin d'utilisation
+//Libèreligne par ligne, puis le tableau de ligne M
 void freeMatrice(int ** M, int l){
   int i;
   for (i=0; i<l; i++){
@@ -361,7 +391,7 @@ void freeMatrice(int ** M, int l){
   free(M);
 }
 
-//initialise une matrice
+//Procédure qui initialise une matrice M à la valeur val
 void initMat(int ** M, int tLi, int tCol, int val){
   int i,j;
   for(i=0;i<tLi;i++){
@@ -371,13 +401,13 @@ void initMat(int ** M, int tLi, int tCol, int val){
   }
 }
 
-//Affiche la matrice (pour les debugs)
+//Procédure qui affiche la matrice (pour les debugs)
 void affMat(int ** m, int l, int c){
   int i,j;
   for(i=0;i<l;i++){
     for(j=0;j<c;j++){
       if(m[i][j]<0){
-        printf("* ");
+        printf("* "); //Pour une meilleur lisibilité des cases non visitées
       }else{
         printf("%d ",m[i][j]);
       }
@@ -387,23 +417,96 @@ void affMat(int ** m, int l, int c){
 }
 
 
-//*****************************************************************************
 
-//Renvoie vrai si la position (x,y)est bien dans la map
-bool isPos(int x, int y, int mapxsize, int mapysize){
-  return (x>=0 && x<mapxsize-1) &&  (y>=0 && y<mapysize-1);
+
+//####################################################################################
+//###Modules relatifs à la recherche de lase case d'un type spécifié le plus proche###
+//####################################################################################
+
+//Procédure Init_tabs
+//qui modifie et remplis coreectement les matrices d et p cooresspondant a distance et pere.
+//
+//-Tout d'abord on crée 2 matrices initialisés à -1 et -2 (cf CR)
+//-Puis on déclare une sous fonction récursive pars(x,y) qui met a jours les voisins de la
+//position (x,y) et se reappelle récursivement sur ce voisin s'il est accessible et inexploré ou
+// déja visité mais avec un chemin plus long
+//-On lance un appelle de cette fonction sur la positiion passé en argument de Init_tabs, qui 
+//remplit correctement les matrices distance et pere
+//-Enfin, on modifie la valeur de d et p pour qu'il pointent sur les matrices distances et pere
+//correctement remplis.
+void Init_tabs(int ** * d, int ** * p, int x, int y, char ** map, int mapxsize, int mapysize){
+
+  int** distance = NULL;
+  distance = matrice(mapxsize, mapysize);
+  initMat(distance, mapxsize, mapysize, -1);
+  distance[x][y] = 0;
+
+  int** pere = NULL;
+  pere = matrice(mapxsize, mapysize);
+  initMat(pere, mapxsize, mapysize, -2);
+
+
+  //On va définir une fonction récursive qui va mettre ses voisins inexlorés à une distance +1
+  void pars(int x, int y){
+    //pour chaque voisin
+    int i,j;
+    //Case gauche
+    i=-1;
+    j=0;
+    if(isPos(x+i,y+j,mapxsize,mapysize) && (distance[x+i][y+j] == -1 || distance[x+i][y+j] > distance[x][y]+1)){ //Si il est accessible et inexploré ou déja été exploré mais de manière moins optimale
+      distance[x+i][y+j] = distance[x][y] + 1; //Alors on actualise sa distance
+      pere[x+i][y+j] = 1; //Et on dit qu'il vient de droite (1 pour la droite par notre convention)
+      if (isAccess(x+i,y+j,map))
+      {
+        pars(x+i,y+j); //Et on continue le chemin récursivement si c'est un chemin
+      }
+    }
+
+    //Case droite
+    i=1;
+    j=0;
+    if(isPos(x+i,y+j,mapxsize,mapysize) && (distance[x+i][y+j] == -1 || distance[x+i][y+j] > distance[x][y]+1)){ //Si il est accessible et inexploré ou déja été exploré mais de manière moins optimale
+      distance[x+i][y+j] = distance[x][y] + 1; //Alors on actualise sa distance
+      pere[x+i][y+j] = 2; //Et on dit qu'il vient de gauche (2 pour la gauche par notre convention)
+      if(isAccess(x+i,y+j,map)){
+        pars(x+i,y+j); //Et on continue le chemin récursivement si c'est un chemin
+      }
+    }
+
+    //Case haut
+    i=0;
+    j=1;
+    if(isPos(x+i,y+j,mapxsize,mapysize) && (distance[x+i][y+j] == -1 || distance[x+i][y+j] > distance[x][y]+1)){ //Si il est accessible et inexploré ou déja été exploré mais de manière moins optimale
+      distance[x+i][y+j] = distance[x][y] + 1; //Alors on actualise sa distance
+      pere[x+i][y+j] = 3;
+      if(isAccess(x+i,y+j,map)){
+        pars(x+i,y+j); //Et on continue le chemin récursivement si c'est un chemin
+      }
+    }
+
+
+    //Case bas
+    i=0;
+    j=-1;
+    if(isPos(x+i,y+j,mapxsize,mapysize) && (distance[x+i][y+j] == -1 || distance[x+i][y+j] > distance[x][y]+1)){ //Si il est accessible et inexploré ou déja été exploré mais de manière moins optimale
+      distance[x+i][y+j] = distance[x][y] + 1; //Alors on actualise sa distance
+      pere[x+i][y+j] = 4;
+      if(isAccess(x+i,y+j,map)){
+        pars(x+i,y+j); //Et on continue le chemin récursivement si c'est un chemin
+      }
+    }
+  }
+
+  //On lance l'appelle initial de notre position
+  pars(x,y);
+
+  *p = pere;
+  *d = distance;
 }
 
-bool isAccess(int x, int y, char ** map){
-  bool ok = false;
-  char val = map[x][y];
-  if(val == PATH) ok = true;
-  if(val == FLAME_BONUS) ok = true;
-  if(val == BOMB_BONUS) ok = true;
-
-  return ok;
-}
-
+//Fonction principale de cette partie
+//renvoie la case de type paramétré la plus proche de la position (x,y) a partir des
+//modules auxiliaire qu'elle
 Case plusProche(
     int ** distance,
     int ** pere,
@@ -415,48 +518,32 @@ Case plusProche(
     char type //Le type de case recherchée (WALL, BREAKABLE_WALL, PATH, EXIT...)
     ){
 
-  //printf("tab ok\n");
+  Case pProche; //Case a renvoyer
 
-  //On obtient à ce stade les tableau distance, et pere correctement remplis.
-  //Reste à trouver par quelle chemin il faut passer
-
-  if(DEBUG) affMat(distance, mapxsize, mapysize);
-  //printf("\n");
-  //affMat(pere, mapxsize, mapysize);
-
-  //printf("\ndeb ok\n");
-
-
-  Position pp;
+  Position pp;//Position plus proche
   pp.x=0;
   pp.y=0;
-  bool trouve = false;
-  posPP(distance, map, mapxsize, mapysize, type, &pp, &trouve); //Position du plus proche
-  if(DEBUG) printf("pp ok\n");
 
-  Position next = posN(pp, pere, distance, mapxsize, mapysize); //Position suivante retrouvé grace au tableau pere
-  if(DEBUG) printf("posN ok\n");
+  bool trouve = false; //Bool qui vrai ssi la case sera trouvé (visible sur la map)
+  Position next; //Position suivante pour aller vers la case
 
+  posPP(distance, map, mapxsize, mapysize, type, &pp, &trouve); //Position du plus proche et de s'il existe
+  next = posN(pp, pere, distance, mapxsize, mapysize); //Position suivante retrouvé grace au tableau pere
 
-
-  Case pProche;
-
+  //MAJ des champs de Case pProche avant de la renvoyer
   pProche.existe = trouve;
   pProche.val = map[pp.x][pp.y];
-  if(DEBUG) printf("val = %c\n", pProche.val);
   pProche.dist = distance[pp.x][pp.y];
-  if(DEBUG) printf("d = %d\n", pProche.dist);
-
   pProche.pos = pp;
-  if(DEBUG) printf("pos = %d,%d\n", pProche.pos.x,pProche.pos.y);
   pProche.posNext = next;
-  if(DEBUG) printf("posNext = %d,%d\n", pProche.posNext.x,pProche.posNext.y);
-
   
   return pProche;
 }
 
-//PROCEDURE renvoyant la position la plus proche à partir de la matrice des distance
+//Procédure posPP
+//qui modifie la position pp et le booléen trouvé passé par addresse en argument.
+//Principe : cherche en parcourant toute la map la position la plus proche (avec la distance minimale)
+//correspondant à une case de type type et qui est accessible (dist != -1) et pas la notre (dist !=0)
 void posPP(int ** distance, char ** map, int tailleX, int tailleY, char type, Position * pp, bool * trouve){
   int distMin = 1000;
   
@@ -464,23 +551,23 @@ void posPP(int ** distance, char ** map, int tailleX, int tailleY, char type, Po
   for (i = 0; i < tailleX; i++) {
     for (j = 0; j < tailleY; j++) {
       if(map[i][j]==type && distance[i][j]<distMin && distance[i][j]!=-1 && distance[i][j]!=0){
-        distMin = distance[i][j];
+        distMin = distance[i][j];//Maj du min
+        //MAJ de la position correspondant à la distance min
         (*pp).x = i;
         (*pp).y = j;
-        *trouve = true;
+        *trouve = true;//Si une telle case existe, existe devient true
       }
     }
   }
 }
 
-//Fonction renvoyant la position où il faut aller pour aller vers la case pp trouvé en remontant le tableau des peres.
+
+//Fonction posN
+//renvoyant la position où il faut aller pour aller vers la case pp trouvé en remontant le tableau des peres.
 Position posN(Position pp, int ** pere, int ** distance, int mapxsize, int mapysize){
   int dist = distance[pp.x][pp.y];
-  //affMat(distance,mapxsize,mapysize);
-  //affMat(pere,mapxsize,mapysize);
   Position pos = pp;
-  //printf("x,y = %d,%d\n", pos.x,pos.y);
-  while(dist>1){ //Boucle FOR mieux ?
+  while(dist>1){
     switch(pere[pos.x][pos.y]) {
       //Viens de droite
       case 1:
@@ -508,7 +595,40 @@ Position posN(Position pp, int ** pere, int ** distance, int mapxsize, int mapys
   return pos;
 }
 
-//***************************
+
+
+
+
+
+//####################################
+//###Procédures d'affichage (DEBUG)###
+//####################################
+
+/*
+  printAction procedure:
+  This procedure prints the input action name on screen.
+ */
+void printAction(action a) {
+  switch(a) {
+  case BOMBING:
+    printf("BOMBING");
+    break;
+  case NORTH:
+    printf("NORTH");
+    break;
+  case EAST:
+    printf("EAST");
+    break;
+  case SOUTH:
+    printf("SOUTH");
+    break;
+  case WEST:
+    printf("WEST");
+    break;
+  }
+}
+
+//Procédure d'affichage de la map (pour les tests)
 void affMap(char ** m, int l, int c){
   int i,j;
   for(i=0;i<l;i++){
@@ -517,83 +637,4 @@ void affMap(char ** m, int l, int c){
     }
     printf("\n");
   }
-}
-
-//***
-void Init_tabs(int ** * d, int ** * p, int x, int y, char ** map, int mapxsize, int mapysize){
-
-  int** distance = NULL;
-  distance = matrice(mapxsize, mapysize);
-  initMat(distance, mapxsize, mapysize, -1);
-  distance[x][y] = 0;
-
-  int** pere = NULL;
-  pere = matrice(mapxsize, mapysize);
-  initMat(pere, mapxsize, mapysize, -2);
-
-
-  //printf("ini ok\n");
-
-
-  //On va définir une fonction récursive qui va mettre ses voisins inexlorés à une distance +1
-  void pars(int x, int y){
-    //printf("\n");
-    //affMat(distance,mapxsize,mapysize);
-    //pour chaque voisin
-    int i,j;
-    //Case gauche
-    i=-1;
-    j=0;
-    if(isPos(x+i,y+j,mapxsize,mapysize) && (distance[x+i][y+j] == -1 || distance[x+i][y+j] > distance[x][y]+1)){ //Si il est accessible et inexploré ou déja été exploré mais de manière moins optimale
-      distance[x+i][y+j] = distance[x][y] + 1; //Alors on actualise sa distance
-      pere[x+i][y+j] = 1; //Et on dit qu'il vient de droite (1 pour la droite par notre convention)
-      if (map[x+i][y+j]==PATH || map[x+i][y+j]==BOMB_BONUS || map[x+i][y+j]==FLAME_BONUS)
-      {
-        //printf("gauche\n");
-        pars(x+i,y+j); //Et on continue le chemin récursivement si c'est un chemin
-      }
-    }
-
-    //Case droite
-    i=1;
-    j=0;
-    if(isPos(x+i,y+j,mapxsize,mapysize) && (distance[x+i][y+j] == -1 || distance[x+i][y+j] > distance[x][y]+1)){ //Si il est accessible et inexploré ou déja été exploré mais de manière moins optimale
-      distance[x+i][y+j] = distance[x][y] + 1; //Alors on actualise sa distance
-      pere[x+i][y+j] = 2; //Et on dit qu'il vient de gauche (2 pour la gauche par notre convention)
-      if(map[x+i][y+j]==PATH || map[x+i][y+j]==BOMB_BONUS || map[x+i][y+j]==FLAME_BONUS){
-        //printf("droite\n");
-        pars(x+i,y+j); //Et on continue le chemin récursivement si c'est un chemin
-      }
-    }
-
-    //Case haut
-    i=0;
-    j=1;
-    if(isPos(x+i,y+j,mapxsize,mapysize) && (distance[x+i][y+j] == -1 || distance[x+i][y+j] > distance[x][y]+1)){ //Si il est accessible et inexploré ou déja été exploré mais de manière moins optimale
-      distance[x+i][y+j] = distance[x][y] + 1; //Alors on actualise sa distance
-      pere[x+i][y+j] = 3;
-      if(map[x+i][y+j]==PATH || map[x+i][y+j]==BOMB_BONUS || map[x+i][y+j]==FLAME_BONUS){
-        //printf("haut\n");
-        pars(x+i,y+j); //Et on continue le chemin récursivement si c'est un chemin
-      }
-    }
-
-
-    //Case bas
-    i=0;
-    j=-1;
-    if(isPos(x+i,y+j,mapxsize,mapysize) && (distance[x+i][y+j] == -1 || distance[x+i][y+j] > distance[x][y]+1)){ //Si il est accessible et inexploré ou déja été exploré mais de manière moins optimale
-      distance[x+i][y+j] = distance[x][y] + 1; //Alors on actualise sa distance
-      pere[x+i][y+j] = 4;
-      if(map[x+i][y+j]==PATH || map[x+i][y+j]==BOMB_BONUS || map[x+i][y+j]==FLAME_BONUS){
-        //printf("bas\n");
-        pars(x+i,y+j); //Et on continue le chemin récursivement si c'est un chemin
-      }
-    }
-  }
-
-  pars(x,y);
-
-  *p = pere;
-  *d = distance;
 }
