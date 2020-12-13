@@ -26,6 +26,11 @@ struct Case
 };
 
 
+//Enumeration pour les directon de la matrice pere
+enum direction {ORIGINE, DROITE, GAUCHE, BAS, HAUT};
+typedef enum direction direction; // define action as a shorthand for enum actions
+
+
 // global declarations
 extern const char BOMBERMAN; // ascii used for bomberman
 extern const char WALL; // ascii used for the walls
@@ -98,6 +103,7 @@ action bomberman(
 		 int explosion_range // explosion range for the bombs 
 		 ) {
 
+  //Déclarations des variables
   action a; // action to choose and return
   if(DEBUG) printf("Debut tour\n");
 
@@ -117,6 +123,7 @@ action bomberman(
   Case bomb = plusProche(distance, pere, map, mapxsize, mapysize, x, y, BOMB);
   Case ghost = plusProche(distance, pere, map, mapxsize, mapysize, x, y, GHOST_ENEMY);
   Case flamme = plusProche(distance, pere, map, mapxsize, mapysize, x, y, FLAME_ENEMY);
+  Case caseAFuire;  //Pour le premier cas(cf ci dessous)
 
   //Déclaration de la Position qui correspond 
   Position me;
@@ -124,18 +131,18 @@ action bomberman(
   me.y = y;
 
 
+
   //Début du programme et de l'algo
   if(DEBUG){printf("Initialisation ok\n");}
 
   //1er cas : 
-  //Si l'on vient de poser une bombe, on s'éloigne
+  //Si l'on vient de poser une bombe ou qu'il y en a une proche, on s'éloigne
   if (last_action == BOMBING || (bomb.dist !=-1 && bomb.dist <= explosion_range+margeSecuBomb) ){
     if(DEBUG){
       printf("%d\n", last_action);
       printf("bomb dist : %d\n", bomb.dist);
       printf("CAS 1\n");
     }
-    Case caseAFuire;
     if(last_action == BOMBING){
       caseAFuire = break_wall;
     }else{
@@ -267,7 +274,7 @@ action reculer(Position posNext, Position me, char ** map, int mapxsize, int map
 
   int x,y;
   action a;
-  bool ok;
+  bool ok = false;
   
   do {
     a=rand()%4+1; //Action choisi aléatoirement (le +1 permet de choisir entre 1 et 5 pour enlever le cas 0 : BOMBING)
@@ -420,7 +427,7 @@ void affMat(int ** m, int l, int c){
 
 
 //####################################################################################
-//###Modules relatifs à la recherche de lase case d'un type spécifié le plus proche###
+//###Modules relatifs à la recherche de la case d'un type spécifié le plus proche###
 //####################################################################################
 
 //Procédure Init_tabs
@@ -446,7 +453,7 @@ void Init_tabs(int ** * d, int ** * p, int x, int y, char ** map, int mapxsize, 
   initMat(pere, mapxsize, mapysize, -2);
 
 
-  //On va définir une fonction récursive qui va mettre ses voisins inexlorés à une distance +1
+  //On va définir une procédure récursive qui va mettre ses voisins inexlorés à une distance +1
   void pars(int x, int y){
     //pour chaque voisin
     int i,j;
@@ -455,7 +462,7 @@ void Init_tabs(int ** * d, int ** * p, int x, int y, char ** map, int mapxsize, 
     j=0;
     if(isPos(x+i,y+j,mapxsize,mapysize) && (distance[x+i][y+j] == -1 || distance[x+i][y+j] > distance[x][y]+1)){ //Si il est accessible et inexploré ou déja été exploré mais de manière moins optimale
       distance[x+i][y+j] = distance[x][y] + 1; //Alors on actualise sa distance
-      pere[x+i][y+j] = 1; //Et on dit qu'il vient de droite (1 pour la droite par notre convention)
+      pere[x+i][y+j] = DROITE; //Et on dit qu'il vient de droite (1 pour la droite par notre convention)
       if (isAccess(x+i,y+j,map))
       {
         pars(x+i,y+j); //Et on continue le chemin récursivement si c'est un chemin
@@ -467,7 +474,7 @@ void Init_tabs(int ** * d, int ** * p, int x, int y, char ** map, int mapxsize, 
     j=0;
     if(isPos(x+i,y+j,mapxsize,mapysize) && (distance[x+i][y+j] == -1 || distance[x+i][y+j] > distance[x][y]+1)){ //Si il est accessible et inexploré ou déja été exploré mais de manière moins optimale
       distance[x+i][y+j] = distance[x][y] + 1; //Alors on actualise sa distance
-      pere[x+i][y+j] = 2; //Et on dit qu'il vient de gauche (2 pour la gauche par notre convention)
+      pere[x+i][y+j] = GAUCHE; //Et on dit qu'il vient de gauche (2 pour la gauche par notre convention)
       if(isAccess(x+i,y+j,map)){
         pars(x+i,y+j); //Et on continue le chemin récursivement si c'est un chemin
       }
@@ -478,7 +485,7 @@ void Init_tabs(int ** * d, int ** * p, int x, int y, char ** map, int mapxsize, 
     j=1;
     if(isPos(x+i,y+j,mapxsize,mapysize) && (distance[x+i][y+j] == -1 || distance[x+i][y+j] > distance[x][y]+1)){ //Si il est accessible et inexploré ou déja été exploré mais de manière moins optimale
       distance[x+i][y+j] = distance[x][y] + 1; //Alors on actualise sa distance
-      pere[x+i][y+j] = 3;
+      pere[x+i][y+j] = BAS;
       if(isAccess(x+i,y+j,map)){
         pars(x+i,y+j); //Et on continue le chemin récursivement si c'est un chemin
       }
@@ -490,7 +497,7 @@ void Init_tabs(int ** * d, int ** * p, int x, int y, char ** map, int mapxsize, 
     j=-1;
     if(isPos(x+i,y+j,mapxsize,mapysize) && (distance[x+i][y+j] == -1 || distance[x+i][y+j] > distance[x][y]+1)){ //Si il est accessible et inexploré ou déja été exploré mais de manière moins optimale
       distance[x+i][y+j] = distance[x][y] + 1; //Alors on actualise sa distance
-      pere[x+i][y+j] = 4;
+      pere[x+i][y+j] = HAUT;
       if(isAccess(x+i,y+j,map)){
         pars(x+i,y+j); //Et on continue le chemin récursivement si c'est un chemin
       }
@@ -506,7 +513,7 @@ void Init_tabs(int ** * d, int ** * p, int x, int y, char ** map, int mapxsize, 
 
 //Fonction principale de cette partie
 //renvoie la case de type paramétré la plus proche de la position (x,y) a partir des
-//modules auxiliaire qu'elle
+//modules auxiliaire qu'elle appelle
 Case plusProche(
     int ** distance,
     int ** pere,
@@ -570,19 +577,19 @@ Position posN(Position pp, int ** pere, int ** distance, int mapxsize, int mapys
   while(dist>1){
     switch(pere[pos.x][pos.y]) {
       //Viens de droite
-      case 1:
+      case DROITE:
         pos.x = pos.x+1; //On décale notre position à droite
         break;
       //Viens de gauche
-      case 2:
+      case GAUCHE:
         pos.x = pos.x-1; //On décale notre position à gauche
         break;
       //Viens du bas
-      case 3:
+      case BAS:
         pos.y = pos.y-1; //On décale notre position en bas
         break;
       //Viens du haut
-      case 4:
+      case HAUT:
         pos.y = pos.y+1; //On décale notre position en haut
         break;
       //Sinon
